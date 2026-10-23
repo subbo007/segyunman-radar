@@ -275,7 +275,7 @@ renderMap=function(rows){
     const p=svg('path',{d:geometryPath(f.geometry,project),class:'map-country '+(!world?'korea-outline ':'')+caseClass(r?.cases),role:'button',tabindex:0,'aria-label':`${r?.name||name}: ${r?nf(r.cases)+rowUnit(r)+', '+rowDate(r):'자료 미연동, 0명 아님'}`});
     attachMapEvents(p,code,name,rows);$('mapPaths').append(p);
   }
-  if(world){for(const r of rows){const feature=geo.features.find(f=>f.properties.iso3===r.code);const center=KNOWN_CENTERS[r.code]||(feature?countryCenter(feature):null);if(!center)continue;const [x,y]=project(center),pos=WORLD_LABELS[r.code]||[Math.min(820,x+18),Math.max(10,y-70)];addCallout(x,y,pos[0],pos[1],r.code,r.name,r,rows,world);}}
+  if(world){const shown=state.disease==='ebola'?rows:[...rows].sort((a,b)=>b.cases-a.cases).slice(0,3);if(state.disease!=='ebola'&&byCode.has(state.selected)&&!shown.some(r=>r.code===state.selected))shown.push(byCode.get(state.selected));for(const [index,r] of shown.entries()){const feature=geo.features.find(f=>f.properties.iso3===r.code);const center=KNOWN_CENTERS[r.code]||(feature?countryCenter(feature):null);if(!center)continue;const [x,y]=project(center),pos=state.disease==='ebola'?(WORLD_LABELS[r.code]||[Math.min(820,x+18),Math.max(10,y-70)]):[[20,20],[795,20],[20,390],[795,390]][index];addCallout(x,y,pos[0],pos[1],r.code,r.name,r,rows,world);}}
   else for(const [code,name,lon,lat] of PROVINCES){const [x,y]=project([lon,lat]);const pos=KOREA_LABELS[code];addCallout(x,y,pos[0],pos[1],code,name,byCode.get(code),rows,false);}
   updateViewBox();highlightMap();
 };
@@ -309,12 +309,12 @@ const originalHighlight=highlightMap;
 highlightMap=function(){originalHighlight();document.querySelectorAll('.map-label-group').forEach(e=>{e.classList.toggle('is-selected',e.dataset.code===state.selected);e.setAttribute('aria-pressed',String(e.dataset.code===state.selected))});document.querySelectorAll('.map-country').forEach(e=>e.setAttribute('aria-pressed',String(e.dataset.code===state.selected)));renderSelectionBar();};
 function renderSelectionBar(){const ds=activeData(),r=regionByCode(state.selected,ds.records||[]);$('mapSelection').innerHTML=r?`<span class="selection-dot"></span><strong>${esc(r.name)}</strong><span>보고 <b>${nf(r.cases)}${rowUnit(r)}</b></span><span>· 사망 ${r.deaths==null?'미보고':nf(r.deaths)+'명'}</span><span>· ${rowDate(r)} 기준</span>`:`<span class="selection-dot"></span><strong>${esc(selectedName())}</strong><span>지역별 수치 미연동 · 0명을 뜻하지 않아요</span>`;}
 function selectedName(){if(state.scope==='korea')return PROVINCES.find(p=>p[0]===state.selected)?.[1]||'선택한 지역';return state.geo.world?.features.find(f=>f.properties.iso3===state.selected)?.properties.name||'선택한 지역'}
-function renderMobileRegions(){const rows=activeData().records||[];$('mobileRegions').replaceChildren();for(const r of rows){const b=document.createElement('button');b.className='mobile-region';b.innerHTML=`<span>${esc(r.name)}</span><b>${nf(r.cases)}${rowUnit(r)}</b><small>${rowDate(r)} 기준</small>`;b.addEventListener('click',()=>{state.selected=r.code;renderSelected(rows);renderRegionList(rows);highlightMap()});$('mobileRegions').append(b);}}
+function renderMobileRegions(){const rows=activeData().records||[];$('mobileRegions').replaceChildren();for(const r of [...rows].sort((a,b)=>b.cases-a.cases).slice(0,6)){const b=document.createElement('button');b.className='mobile-region';b.innerHTML=`<span>${esc(r.name)}</span><b>${nf(r.cases)}${rowUnit(r)}</b><small>${rowDate(r)} 기준</small>`;b.addEventListener('click',()=>{state.selected=r.code;renderSelected(rows);renderRegionList(rows);highlightMap()});$('mobileRegions').append(b);}}
 const baseSelected=renderSelected;
 renderSelected=function(rows){baseSelected(rows);if(!regionByCode(state.selected,rows)){$('selectedRegion').innerHTML=`<strong>${esc(selectedName())}</strong><p>아직 연결된 수치가 없어요.<br>자료 없음은 0명과 다릅니다.</p>`;}else if(activeData().imported){$('selectedRegion').innerHTML=$('selectedRegion').innerHTML.replace('누적 확진','신고·감시 수치');$('detailBottom').textContent='사용자 제공 자료 · 신고자료와 표본감시의 집계 기준은 다를 수 있습니다.';}renderSelectionBar();};
 showTooltip=function(event,code,name,rows){const r=regionByCode(code,rows),tip=$('mapTooltip'),canvas=$('mapCanvas');tip.innerHTML=`<strong>${esc(r?.name||name)}</strong><br>${r?`보고 <b>${nf(r.cases)}${rowUnit(r)}</b> · 사망 ${r.deaths==null?'미보고':nf(r.deaths)+'명'}<br><small>${rowDate(r)} 기준<br>${esc(r.statusLabel||'사용자 제공 수치')}</small>`:'<small>지역별 자료 미연동<br>0명이 아닙니다 · 기준일 없음</small>'}`;tip.classList.remove('hidden');const rect=canvas.getBoundingClientRect(),nodeRect=event.currentTarget?.getBoundingClientRect();const x=event.clientX>0?event.clientX:nodeRect?.x||rect.x+10,y=event.clientY>0?event.clientY:nodeRect?.y||rect.y+10;tip.style.left=(canvas.scrollLeft+Math.max(4,Math.min(x-rect.left+12,canvas.clientWidth-tip.offsetWidth-8)))+'px';tip.style.top=Math.max(4,Math.min(y-rect.top-30,canvas.clientHeight-tip.offsetHeight-8))+'px';};
 
-function renderStories(){const list=state.scope==='world'?WORLD:KOREA,icons=['✳','◌','✿','✧','≈','❋','○','✺','◈','✤','✽'];$('diseaseStories').replaceChildren();for(let i=0;i<list.length;i++){const d=list[i],official=state.scope==='world'&&d.id==='ebola',custom=state.imported.some(r=>r.scope===state.scope&&r.disease===d.id),button=document.createElement('button');button.className='story'+(state.disease===d.id?' active':'');button.setAttribute('aria-pressed',String(state.disease===d.id));button.innerHTML=`<span class="story-circle" aria-hidden="true">${icons[i]}</span><span class="story-name">${esc(d.label.replace(/\s*\(.*?\)/g,''))}</span><span class="story-status">${custom?'사용자 CSV':official?'WHO 수록':'자료 미연동'}</span>`;button.addEventListener('click',()=>switchDisease(d.id));$('diseaseStories').append(button);}}
+function renderStories(){const list=state.scope==='world'?WORLD:KOREA,icons=['✳','◌','✿','✧','≈','❋','○','✺','◈','✤','✽'];$('diseaseStories').replaceChildren();for(let i=0;i<list.length;i++){const d=list[i],official=state.scope==='world'&&d.id==='ebola',custom=state.imported.some(r=>r.scope===state.scope&&r.disease===d.id),button=document.createElement('button');button.className='story'+(state.disease===d.id?' active':'');button.setAttribute('aria-pressed',String(state.disease===d.id));button.innerHTML=`<span class="story-circle" aria-hidden="true">${icons[i%icons.length]}</span><span class="story-name">${esc(d.label.replace(/\s*\(.*?\)/g,''))}</span><span class="story-status">${custom?'사용자 CSV':official?'WHO 수록':'자료 미연동'}</span>`;button.addEventListener('click',()=>switchDisease(d.id));$('diseaseStories').append(button);}}
 function companionData(){const other=state.scope==='world'?'korea':'world',disease=other==='world'?'ebola':'chickenpox',custom=recordsWithLatest(state.imported.filter(r=>r.scope===other&&r.disease===disease)),records=custom.length?custom:(other==='world'?state.data.ebola?.records:state.data.korea?.records?.filter(r=>r.disease===disease))||[];return{other,disease,records,custom:!!custom.length};}
 function renderCompanion(){
  const {other,disease,records,custom}=companionData(),kr=other==='korea',geo=state.geo[other];$('companionMap').replaceChildren();
@@ -410,8 +410,8 @@ renderAll=function(){
 
 function recentModel(data,disease,mode='daily'){
   const recent=data?.recent,entry=recent?.diseases?.[disease];if(!entry)return null;
-  const points=mode==='weekly'?entry.weekly.map(r=>({label:r.label,tick:r.week+'주',cases:r.cases})):entry.daily.map(r=>({label:r.date,tick:r.date.slice(5).replace('-','/'),cases:r.cases}));
-  return {recent,entry,points,max:Math.max(1,...points.map(r=>r.cases??0)),weekly:mode==='weekly'};
+  const points=(mode==='weekly'||!entry.daily?.length)?(entry.weekly||[]).map(r=>({label:r.label,tick:r.week+'주',cases:r.cases})):(entry.daily||[]).map(r=>({label:r.date,tick:r.date.slice(5).replace('-','/'),cases:r.cases}));
+  return {recent,entry,points,max:Math.max(1,...points.map(r=>r.cases??0)),weekly:mode==='weekly'||!entry.daily?.length};
 }
 function renderRecentReports(){
   const box=$('recentReports'),ds=activeData();const model=state.scope==='korea'&&!ds.imported?recentModel(state.data.korea,state.disease,state.trendMode):null;
@@ -419,9 +419,9 @@ function renderRecentReports(){
   const {recent,entry,points,max,weekly}=model,lastWeek=entry.weekly.at(-1),format=n=>n==null?'미보고':nf(n)+'건';
   const info=sourceState('korea'),warning=info.state==='error'||updateStateLabel('korea')==='최근 갱신 지연';
   box.innerHTML=`<div class="recent-heading"><div><div class="eyebrow">THE LATEST REPORTS</div><h2 id="recentTitle">${esc(diseaseName('korea',state.disease))}, 최근 신고 흐름</h2><p>전국 신고 통계 · 지역 선택과 별개 · ${readableDate(recent.endDate)} 23:59 KST 기준</p></div><span class="recent-badge">잠정 통계 · 수정 가능</span></div>
-  <div class="recent-stats"><div class="recent-stat"><span>최신 집계일 신고</span><strong>${format(entry.latestDay.cases)}</strong><small>${readableDate(entry.latestDay.date)} 하루</small></div><div class="recent-stat"><span>최근 7일 신고</span><strong>${format(entry.last7Days)}</strong><small>${recent.startDate.slice(5).replace('-','.')}–${recent.endDate.slice(5).replace('-','.')} · 7일 합계</small></div><div class="recent-stat"><span>최근 완료 주차</span><strong>${format(lastWeek.cases)}</strong><small>${esc(lastWeek.label)} · 전국</small></div></div>
+  <div class="recent-stats"><div class="recent-stat"><span>최신 집계일 신고</span><strong>${format(entry.latestDay?.cases)}</strong><small>${(entry.latestDay?readableDate(entry.latestDay.date):'일별 자료 미제공')} 하루</small></div><div class="recent-stat"><span>최근 7일 신고</span><strong>${format(entry.last7Days)}</strong><small>${recent.startDate.slice(5).replace('-','.')}–${recent.endDate.slice(5).replace('-','.')} · 7일 합계</small></div><div class="recent-stat"><span>최근 완료 주차</span><strong>${format(lastWeek?.cases)}</strong><small>${esc(lastWeek?.label||'주간 자료 미제공')} · 전국</small></div></div>
   ${warning?'<p class="recent-warning">최근 갱신에 문제가 있어 마지막으로 검증한 자료를 표시합니다. 아래 수집 시각과 기준일을 확인하세요.</p>':''}
-  <div class="trend-toolbar"><div class="trend-toggle" aria-label="신고 추이 기간"><button type="button" data-trend="daily" aria-pressed="${!weekly}">최근 7일 · 일별</button><button type="button" data-trend="weekly" aria-pressed="${weekly}">최근 8주 · 주별</button></div><span class="small-note">${weekly?'진행 중인 주차 제외 · 완료 주차도 잠정값':'신고일 기준 · 0건과 미보고 구분'}</span></div>
+  <div class="trend-toolbar"><div class="trend-toggle" aria-label="신고 추이 기간"><button type="button" data-trend="daily" ${entry.daily?.length?'':'disabled'} aria-pressed="${!weekly}">최근 7일 · 일별</button><button type="button" data-trend="weekly" aria-pressed="${weekly}">최근 8주 · 주별</button></div><span class="small-note">${weekly?'진행 중인 주차 제외 · 완료 주차도 잠정값':'신고일 기준 · 0건과 미보고 구분'}</span></div>
   <div class="trend-chart" style="--columns:${points.length}" role="img" aria-label="${weekly?'최근 8주':'최근 7일'} 전국 신고 추이. 상세 수치는 아래 표에서 확인할 수 있습니다.">${points.map(p=>`<div class="trend-column" title="${esc(p.label)}: ${format(p.cases)}"><span class="trend-value">${p.cases==null?'—':nf(p.cases)}</span><div class="trend-bar${p.cases==null?' trend-missing':''}" style="height:${p.cases==null?8:Math.max(1,p.cases/max*70)}%"></div><span class="trend-tick">${esc(p.tick)}</span></div>`).join('')}</div>
   <details class="trend-table"><summary>날짜별 수치와 집계 기간 보기</summary><table><caption>${weekly?'완료 주차별 신고':'일별 신고'} · 전국</caption><thead><tr><th scope="col">${weekly?'집계 주차':'신고일'}</th><th scope="col">신고 발생수</th></tr></thead><tbody>${points.map(p=>`<tr><th scope="row">${esc(p.label)}</th><td>${format(p.cases)}</td></tr>`).join('')}</tbody></table></details>
   <p class="recent-foot">일별: <a href="${safeUrl(recent.dailySource)}" target="_blank" rel="noopener noreferrer">질병관리청 공식 대시보드 ↗</a> · 주별: <a href="${safeUrl(recent.weeklySource)}" target="_blank" rel="noopener noreferrer">전수신고 API ↗</a><br>수집 확인 ${localTime(recent.checkedAt)} · 신고 건수는 현재 감염자 수와 다릅니다. 최근 7일과 공식 주차의 시작·종료일은 서로 다릅니다.</p>`;
@@ -446,5 +446,95 @@ renderCompanion=function(){renderOldCompanion();const c=companionData();if(c.oth
 const originalLiveModal=openModal;
 openModal=function(type){originalLiveModal(type);if(type==='import'){const p=document.createElement('p');p.textContent='연도별 신고 자료: metric_type은 annual_reported, period는 YYYY, as_of는 빈칸으로 지정합니다. 날짜별 자료와 섞지 않습니다.';$('modalContent').append(p);}if(type==='sources')$('modalContent').innerHTML=`<div class="modal-content"><p><b>WHO 에볼라</b><br><a href="https://www.who.int/emergencies/alert-and-response" target="_blank" rel="noopener noreferrer">WHO 공식 표</a>에서 국가별 확진·사망·기준일을 수집하고 총계를 대조합니다. 수집 실패나 표 구조 변경 시 이전 정상 자료를 유지합니다.</p><p><b>국내 감염병</b><br><a href="https://www.data.go.kr/data/15139178/openapi.do" target="_blank" rel="noopener noreferrer">질병관리청 전수신고 API</a>의 연도별 지역 신고 및 주간 전국 통계를 수집합니다. 최근 7일은 <a href="https://dportal.kdca.go.kr/pot/is/dashboardEDW.do" target="_blank" rel="noopener noreferrer">질병관리청 공개 대시보드</a>의 일별 응답을 사용합니다. 포털 화면용 응답은 구조가 바뀔 수 있어 날짜·질병 코드·누락을 검증하고 실패 시 이전 정상 자료를 유지합니다. 전국 합계는 지도 지역에 중복으로 더하지 않습니다. 전남광주 통합 응답은 별도 목록으로 보존하며 지도에 임의 분배하지 않습니다. 지역별 사망·표본감시는 미연동입니다.</p><p><b>자동 갱신</b><br>GitHub Actions 설정이 완료되면 매일 09:23 KST에 수집·검증·배포합니다. 지연될 수 있으며 실제 성공 시각은 출처 카드에 표시합니다. API 키는 Actions Secret에만 저장합니다.</p><p><b>현재 화면</b><br>${ATLAS_OFFLINE?'저장된 HTML 사본입니다. 이후 자동 갱신은 배포 사이트에서 확인하세요.':'배포된 공개 JSON을 5분마다 읽습니다. 새로고침 버튼이 WHO·질병관리청에 직접 요청하는 것은 아닙니다.'}</p><p><b>지도</b><br>Natural Earth 및 국내 2023 시·도 경계를 사용합니다. 연도별 신고, 누적 확진, 표본감시는 서로 다른 지표입니다.</p></div>`;};
 
-init();
+
 if(!ATLAS_OFFLINE)setInterval(()=>{if(!document.hidden)loadStaticData()},5*60*1000);
+
+/* Each indicator keeps its own source, period, unit and refresh state. */
+function officialDataset(scope=state.scope,disease=state.disease){
+  if(scope==='world')return disease==='ebola'?state.data.ebola:state.data.world?.datasets?.[disease];
+  return state.data.sentinel?.datasets?.[disease]||((state.data.korea?.catalog||[]).some(d=>d.id===disease)?state.data.korea:null);
+}
+const applyCorePublicData=applyPublicData;
+applyPublicData=function(data){
+  for(const collection of [data?.world?.datasets,data?.sentinel?.datasets])for(const ds of Object.values(collection||{})){
+    if(!Array.isArray(ds.records)||typeof ds.sourceKey!=='string')throw Error('추가 자료 구조 오류');
+    for(const r of ds.records)if(!Number.isSafeInteger(r.cases)||r.cases<0||!r.code||!r.name)throw Error('국가 수치 오류');
+    if(ds.national&&(!Array.isArray(ds.weekly)||!ds.latest||!Number.isFinite(ds.latest.value)||ds.latest.value<0))throw Error('표본감시 수치 오류');
+  }
+  applyCorePublicData(data);state.data.sentinel=data.sentinel||{datasets:{}};
+  const annual=data.korea.catalog||KOREA.filter(d=>['chickenpox','pertussis','measles','malaria','dengue'].includes(d.id));
+  const sentinel=Object.entries(state.data.sentinel.datasets||{}).map(([id,ds])=>({id,label:ds.title,kind:'sentinel'}));
+  KOREA.splice(0,KOREA.length,...annual,...sentinel);
+};
+const embeddedCoreData=embeddedPublicData;
+embeddedPublicData=function(){return {...embeddedCoreData(),sentinel:STATIC_DATA['data/sentinel.json']||{datasets:{}}};};
+const activeCoreData=activeData;
+activeData=function(){
+  if(importedRecords().length)return activeCoreData();
+  const ds=officialDataset();
+  if(ds)return state.scope==='korea'&&!ds.national?{...ds,records:ds.records.filter(r=>r.disease===state.disease)}:ds;
+  return activeCoreData();
+};
+koreaOfficial=function(ds){return state.scope==='korea'&&!ds.imported&&!ds.national&&((ds.records||[]).length>0||!!ds.catalog);};
+hasOfficialCollector=function(){return !!officialDataset()||(state.scope==='world'&&state.disease==='ebola')||(state.scope==='korea'&&['chickenpox','pertussis','measles','malaria','dengue'].includes(state.disease));};
+sourceState=function(scope=state.scope){const ds=scope===state.scope?officialDataset(scope):null;return state.data.updateStatus?.sources?.[ds?.sourceKey||(scope==='world'?'who':'kdca')]||{};};
+rowUnit=function(row){return row.metric==='confirmed_cases'?'명':row.metric==='reported_cases'||row.metric==='detections'?'건':'명';};
+
+const refreshCoreOptions=refreshDiseaseOptions;
+refreshDiseaseOptions=function(){
+  refreshCoreOptions();if(state.scope!=='korea')return;
+  const option=d=>`<option value="${esc(d.id)}">${esc(d.label)}</option>`;
+  $('diseaseSelect').innerHTML='<optgroup label="전수신고 · API 전체 질병">'+KOREA.filter(d=>d.kind!=='sentinel').map(option).join('')+'</optgroup><optgroup label="표본감시 · 전국 주간 지표">'+KOREA.filter(d=>d.kind==='sentinel').map(option).join('')+'</optgroup>';
+  $('diseaseSelect').value=state.disease;
+};
+const expandedCoreStories=renderStories;
+renderStories=function(){expandedCoreStories();const list=state.scope==='world'?WORLD:KOREA;document.querySelectorAll('#diseaseStories .story').forEach((node,i)=>{const ds=officialDataset(state.scope,list[i].id);if(ds)node.querySelector('.story-status').textContent=ds.national?'전국 표본감시':state.scope==='korea'?'전수신고':'WHO 수록';});};
+
+function nationalTrend(ds){
+  const points=ds.weekly,max=Math.max(1,...points.map(p=>p.value??0)),format=n=>n==null?'미보고':nf(n)+(ds.unit==='명'?'명':'');
+  return `<div class="national-heading"><span class="round-icon">✿</span><div><div class="eyebrow">WEEKLY SENTINEL WATCH</div><h3>${esc(ds.metricLabel)}</h3><p>전국 · 전체 연령 · ${esc(ds.periodLabel)}</p></div></div><p class="national-context">${ds.metric==='sentinel_ratio'?'외래환자 1,000명당 분율 · 주간 값을 더하지 않아요.':'표본기관이 신고한 주간 환자 수 · 전국 전체 환자 수와 달라요.'}</p>
+  <div class="trend-chart" style="--columns:${points.length}" role="img" aria-label="${esc(ds.title)} 최근 주간 추이. 아래 수치 표에서 확인할 수 있습니다.">${points.map(p=>`<div class="trend-column" title="${esc(p.label)}: ${format(p.value)}"><span class="trend-value">${p.value==null?'—':nf(p.value)}</span><div class="trend-bar${p.value==null?' trend-missing':''}" style="height:${p.value==null?8:Math.max(1,p.value/max*70)}%"></div><span class="trend-tick">${p.week}주</span></div>`).join('')}</div>
+  <details class="trend-table"><summary>주차별 수치·단위 보기</summary><table><caption>${esc(ds.metricLabel)} · 단위 ${esc(ds.unit)}</caption><thead><tr><th>주차</th><th>수치</th></tr></thead><tbody>${points.map(p=>`<tr><th scope="row">${esc(p.label)}</th><td>${format(p.value)}</td></tr>`).join('')}</tbody></table></details><p class="recent-foot">시·도별 수치로 나누지 않은 전국 자료입니다. 진행 중인 주차는 제외하며 잠정값은 수정될 수 있습니다.<br><a href="${safeUrl(ds.sourceUrl)}" target="_blank" rel="noopener noreferrer">질병관리청 원자료 ↗</a> · 수집 확인 ${localTime(ds.checkedAt)}</p>`;
+}
+const expandedCoreRender=renderAll;
+renderAll=function(){
+  expandedCoreRender();const ds=activeData(),national=!!ds.national,extra=state.scope==='world'&&state.disease!=='ebola'&&!ds.imported&&!!officialDataset();
+  $('mapCanvas').classList.toggle('hidden',national);document.querySelector('.map-bottom').classList.toggle('hidden',national);$('mobileRegions').classList.toggle('hidden',national);
+  let card=$('nationalIndicator');if(!card){card=document.createElement('section');card.id='nationalIndicator';card.className='national-indicator';$('mapCanvas').before(card);}card.classList.toggle('hidden',!national);
+  document.querySelector('.section-title span').textContent=state.scope==='korea'?`전수신고 ${KOREA.filter(d=>d.kind!=='sentinel').length}종 · 표본감시 ${KOREA.filter(d=>d.kind==='sentinel').length}개 지표`:'WHO 6개 질병 · 보고기간과 지표를 함께 확인해요';
+  if(!ds.imported&&ds.periodLabel){$('periodSelect').innerHTML=`<option value="latest">${esc(ds.periodLabel)}</option>`;$('periodSelect').disabled=true;}
+  if(extra){
+    $('mapDescription').textContent=diseaseName('world',state.disease)+' · '+ds.metricLabel;
+    $('mapBadge').textContent='WHO 공식 자료';$('metricCasesUnit').textContent=ds.unit;
+    $('casesLabel').textContent=ds.metricLabel;$('metricCasesNote').textContent=ds.mixedPeriods?'국가마다 보고기간이 달라 합산하지 않음':'수록 국가·지역의 보고값 합계';
+    if(ds.mixedPeriods){$('metricCases').textContent='—';$('metricCasesUnit').textContent='기간별';$('metricDeaths').textContent='—';$('metricDeathsNote').textContent='서로 다른 기간의 사망 수를 합산하지 않음';}
+    $('metricRegionLabel').textContent='자료 수록 국가·지역';$('metricRegions').textContent=nf(ds.records.length);$('metricRegionsNote').textContent='명시된 0건 포함 · 미보고 제외';
+    $('metricDate').textContent=ds.snapshotDate?readableDate(ds.snapshotDate):ds.periodLabel;$('metricDateNote').textContent=ds.snapshotDate?'가장 최근 기간 종료일 · 국가별 상이':'연간 통계 · 올해 실시간 수치 아님';
+    document.querySelector('.rank-head span:last-child').textContent='지표 수치 / 보고기간';
+  }
+  if(national){
+    card.innerHTML=nationalTrend(ds);$('recentReports').classList.add('hidden');
+    $('mapTitle').textContent='우리나라 주간 감시';$('mapDescription').textContent=ds.title+' · 전국 지표';$('mapBadge').textContent='KDCA 표본감시';
+    $('casesLabel').textContent=ds.metricLabel;$('metricCases').textContent=nf(ds.latest.value);$('metricCasesUnit').textContent=ds.unit;$('metricCasesNote').textContent=ds.periodLabel+' · 전국 표본기관';
+    $('metricDeaths').textContent='—';$('metricDeathsNote').textContent='이 지표에서 제공하지 않음';$('metricRegionLabel').textContent='집계 범위';$('metricRegions').textContent='전국';$('metricRegions').nextElementSibling.textContent='';
+    $('metricRegionsNote').textContent='시·도별 지도에 임의 배분하지 않음';$('metricDate').textContent=ds.periodLabel;$('metricDateNote').textContent='최근 수치가 있는 완료 주차';
+    $('mapSelection').textContent='전국 표본기관 · 전체 연령 · 주간 지표';$('detailTitle').textContent='전국 표본감시 안내';
+    $('selectedRegion').innerHTML=`<strong>${esc(ds.title)}</strong><p>${esc(ds.metricLabel)}<br><b>${nf(ds.latest.value)} ${esc(ds.unit)}</b> · ${esc(ds.periodLabel)}</p>`;
+    $('detailBottom').textContent='이 지표는 전국 전체 환자 수를 뜻하지 않습니다.';$('regionList').innerHTML='<p class="empty-regions">전국 주간 추이를 위 카드에 표시했습니다.<br>시·도별 분포는 이 연결에서 제공하지 않습니다.</p>';
+  }else $('metricRegions').nextElementSibling.textContent='곳';
+};
+
+const expandedCoreSelected=renderSelected;
+renderSelected=function(rows){
+  expandedCoreSelected(rows);const ds=activeData(),r=regionByCode(state.selected,rows);
+  if(state.scope==='world'&&state.disease!=='ebola'&&!ds.imported&&r){
+    $('selectedRegion').innerHTML=`<strong>${esc(r.name)}</strong><div class="selected-figures"><span>${esc(ds.metricLabel)}<br><b>${nf(r.cases)}${rowUnit(r)}</b></span><span>사망<br><b>${r.deaths==null?'미보고':nf(r.deaths)+'명'}</b></span><span>집계 기간<br><b style="font-size:13px">${esc(r.periodLabel||rowDate(r))}</b></span></div>`;
+    $('detailBottom').textContent=ds.mixedPeriods?'국가별 최근 완료 보고기간 하나를 표시합니다. 보고기간·감시 범위가 다릅니다.':ds.periodLabel;
+  }
+};
+const expandedCoreDownload=downloadCsv;
+downloadCsv=function(){const ds=activeData();if(!ds.national)return expandedCoreDownload();const rows=[['disease','year','week','value','unit','metric','source_url'],...ds.weekly.map(p=>[state.disease,p.year,p.week,p.value??'',ds.unit,ds.metric,ds.sourceUrl])];downloadFile('\uFEFF'+rows.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n'),'세균맨-레이더-표본감시.csv','text/csv;charset=utf-8');};
+const expandedCoreModal=openModal;
+openModal=function(type){expandedCoreModal(type);if(type!=='sources')return;$('modalContent').innerHTML=`<div class="modal-content"><p><b>국내 전수신고</b><br><a href="https://www.data.go.kr/data/15139178/openapi.do" target="_blank" rel="noopener noreferrer">질병관리청 API</a>가 반환하는 전체 질병의 지역별 연간 신고를 수록합니다. 포털에서 확인되는 질병은 최근 7일 및 완료 주차 추이를 제공합니다. 누락값은 0으로 채우지 않습니다.</p><p><b>국내 표본감시</b><br>질병관리청 공식 포털의 독감·수족구 분율, 급성호흡기·장관감염증 주간 환자 수를 수록합니다. 전국·전체 연령 지표이며 전수신고와 구분합니다.</p><p><b>세계 자료</b><br>WHO 에볼라 공식 표, Mpox·Dengue 대시보드, GHO 홍역 연간 통계, 콜레라·AWD 대시보드, FluNet 표본감시 검출 자료를 연결합니다. 질병마다 누적·연간·주간·월간 집계가 다릅니다. 국가별 기간과 해당 화면의 출처·주의사항을 확인하세요.</p><p><b>자동 갱신</b><br>매일 09:23 KST에 GitHub Actions가 수집·검증·배포합니다. 각 출처의 실패는 별도로 표시하며 마지막 정상 자료를 보존합니다. 원천기관의 발표 주기와 수집 주기는 다릅니다. 화면은 배포 자료를 5분마다 다시 읽으며 API 키는 공개되지 않습니다.</p><p><b>지도</b><br>수록 국가와 지도 경계가 일치하지 않는 일부 지역은 목록에서 확인할 수 있습니다. 전남광주 통합 응답도 목록에 별도로 보존합니다. 회색은 미보고이며 0건과 다릅니다.</p></div>`;};
+
+init();
