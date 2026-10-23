@@ -1,2 +1,7 @@
-# segyunman-radar
-세균맨 레이더 — public static website and official aggregate data
+# 세균맨 레이더
+
+https://subbo007.github.io/segyunman-radar/
+
+공식 감염병 보고를 지도에서 확인하는 서비스입니다.
+이 저장소에는 공개 화면과 검증된 집계 데이터만 자동 배포됩니다.
+자료의 출처·기준일·미연동 상태는 사이트에서 확인하세요.
