@@ -298,7 +298,7 @@ function addCallout(x,y,bx,by,code,name,r,rows,world){
   addAtlasPin(g,x,y,!r);
   g.append(svg('rect',{x:bx,y:by,width:w,height:h,rx:16,class:'map-label-box'}));
   g.append(svg('circle',{cx:bx+14,cy:by+20,r:3.5,class:'label-status-dot'}));
-  g.append(svg('text',{x:bx+25,y:by+25,class:'map-label-name'},name));
+  g.append(svg('text',{x:bx+25,y:by+25,class:'map-label-name'},name.length>21?name.slice(0,20)+'…':name));
   g.append(svg('text',{x:bx+13,y:by+(world?49:46),class:'map-label-number'},r?nf(r.cases)+rowUnit(r):'— 미연동'));
   if(world)g.append(svg('text',{x:bx+13,y:by+66,class:'map-label-date'},r?rowDate(r)+' 기준':'기준일 없음'));
   else if(r)g.append(svg('text',{x:bx+w-10,y:by+46,'text-anchor':'end',class:'map-label-date'},(r.asOf?r.asOf.slice(5).replace('-','.'):r.period+'년')));
@@ -355,7 +355,7 @@ function koreaOfficial(ds){return state.scope==='korea'&&!ds.imported&&(ds.recor
 function localTime(iso){if(!iso)return '아직 없음';const date=new Date(iso);return Number.isNaN(date.getTime())?'확인 필요':date.toLocaleString('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})+' KST'}
 function sourceState(scope=state.scope){return state.data.updateStatus?.sources?.[scope==='world'?'who':'kdca']||{};}
 function hasOfficialCollector(){return state.scope==='world'?state.disease==='ebola':['chickenpox','pertussis','measles','malaria','dengue'].includes(state.disease);}
-function updateStateLabel(scope=state.scope){const info=sourceState(scope);if(info.state==='needs_key')return '인증키 설정 대기';if(info.state==='error')return '갱신 실패 · 이전 자료';if(!info.lastSuccessAt)return '보관된 스냅샷';if(Date.now()-new Date(info.lastSuccessAt).getTime()>48*60*60*1000)return '최근 갱신 지연';return '공식 자료 갱신됨';}
+function updateStateLabel(scope=state.scope){const info=sourceState(scope);if(info.state==='partial')return '일별 일부 조회 실패';if(info.state==='needs_key')return '인증키 설정 대기';if(info.state==='error')return '갱신 실패 · 이전 자료';if(!info.lastSuccessAt)return '보관된 스냅샷';if(Date.now()-new Date(info.lastSuccessAt).getTime()>48*60*60*1000)return '최근 갱신 지연';return '공식 자료 갱신됨';}
 
 const previousImportedRecords=importedRecords;
 importedRecords=function(){const rows=previousImportedRecords();if(rows.length&&rows.every(r=>!r.asOf&&r.period)){const year=rows.map(r=>r.period).sort().at(-1);return rows.filter(r=>r.period===year);}return rows;};
@@ -400,7 +400,7 @@ renderAll=function(){
   else{document.querySelector('.source-caption').textContent=state.lastLoadError||'공식기관 수집은 GitHub Actions가 수행합니다. 이 화면은 배포된 자료를 5분마다 다시 읽습니다.';}
   $('refreshButton').textContent=ATLAS_OFFLINE?'↻ 포함된 자료 다시 읽기':'↻ 최신 배포 자료 확인';
   $('refreshButton').title=ATLAS_OFFLINE?'포함된 스냅샷을 읽습니다':'GitHub Actions가 배포한 공개 데이터를 다시 읽습니다';
-  if(!ds.imported&&hasProvider&&info.message&&(info.state==='error'||info.state==='needs_key')){const warning=document.createElement('li');warning.textContent=info.message;$('qualityNotes').prepend(warning);}
+  if(!ds.imported&&hasProvider&&info.message&&(info.state==='error'||info.state==='partial'||info.state==='needs_key')){const warning=document.createElement('li');warning.textContent=info.message;$('qualityNotes').prepend(warning);}
   document.querySelector('.rank-head span:last-child').textContent=domestic||ds.periodLabel?'신고 발생 / 집계 연도':'보고 수치 / 기준일';
   renderRecentReports();
   let boundary=$('boundaryNote');if(!boundary){boundary=document.createElement('div');boundary.id='boundaryNote';boundary.className='boundary-note';$('maps').after(boundary);}
@@ -420,6 +420,7 @@ function renderRecentReports(){
   const info=sourceState('korea'),warning=info.state==='error'||updateStateLabel('korea')==='최근 갱신 지연';
   box.innerHTML=`<div class="recent-heading"><div><div class="eyebrow">THE LATEST REPORTS</div><h2 id="recentTitle">${esc(diseaseName('korea',state.disease))}, 최근 신고 흐름</h2><p>전국 신고 통계 · 지역 선택과 별개 · ${readableDate(recent.endDate)} 23:59 KST 기준</p></div><span class="recent-badge">잠정 통계 · 수정 가능</span></div>
   <div class="recent-stats"><div class="recent-stat"><span>최신 집계일 신고</span><strong>${format(entry.latestDay?.cases)}</strong><small>${(entry.latestDay?readableDate(entry.latestDay.date):'일별 자료 미제공')} 하루</small></div><div class="recent-stat"><span>최근 7일 신고</span><strong>${format(entry.last7Days)}</strong><small>${recent.startDate.slice(5).replace('-','.')}–${recent.endDate.slice(5).replace('-','.')} · 7일 합계</small></div><div class="recent-stat"><span>최근 완료 주차</span><strong>${format(lastWeek?.cases)}</strong><small>${esc(lastWeek?.label||'주간 자료 미제공')} · 전국</small></div></div>
+  ${entry.dailyStatus?'<p class="recent-warning">'+esc(entry.dailyStatus)+'</p>':''}
   ${warning?'<p class="recent-warning">최근 갱신에 문제가 있어 마지막으로 검증한 자료를 표시합니다. 아래 수집 시각과 기준일을 확인하세요.</p>':''}
   <div class="trend-toolbar"><div class="trend-toggle" aria-label="신고 추이 기간"><button type="button" data-trend="daily" ${entry.daily?.length?'':'disabled'} aria-pressed="${!weekly}">최근 7일 · 일별</button><button type="button" data-trend="weekly" aria-pressed="${weekly}">최근 8주 · 주별</button></div><span class="small-note">${weekly?'진행 중인 주차 제외 · 완료 주차도 잠정값':'신고일 기준 · 0건과 미보고 구분'}</span></div>
   <div class="trend-chart" style="--columns:${points.length}" role="img" aria-label="${weekly?'최근 8주':'최근 7일'} 전국 신고 추이. 상세 수치는 아래 표에서 확인할 수 있습니다.">${points.map(p=>`<div class="trend-column" title="${esc(p.label)}: ${format(p.cases)}"><span class="trend-value">${p.cases==null?'—':nf(p.cases)}</span><div class="trend-bar${p.cases==null?' trend-missing':''}" style="height:${p.cases==null?8:Math.max(1,p.cases/max*70)}%"></div><span class="trend-tick">${esc(p.tick)}</span></div>`).join('')}</div>
