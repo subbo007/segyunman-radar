@@ -44,4 +44,20 @@
 </main><div class="hidden" aria-hidden="true"><span id="breadcrumbScope"></span><span id="headerDataDate"></span><span id="todayText"></span><span id="mapFooterNote"></span><button id="mobileImport" tabindex="-1"></button></div>
 <div id="modalBackdrop" class="modal-backdrop hidden"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-header"><h2 id="modalTitle">자료 안내</h2><button id="closeModal" class="icon-button" aria-label="닫기">×</button></div><div id="modalContent"></div></div></div><div id="toast" role="status" class="toast hidden"></div>
 <script src="snapshot.js?v=ed31a34daebf9e97"></script><script src="app.js?v=ed31a34daebf9e97"></script>
+<script>// Public Web Analytics beacon identifier, not a Cloudflare account API key.
+// An empty token keeps collection disabled until account setup is complete.
+(() => {
+  const token = 'dd112b9b718e473aa0fc2d51092b2329';
+  if (!/^[a-f0-9]{32}$/i.test(token)) return;
+  if (location.protocol !== 'https:' || location.hostname !== 'subbo007.github.io') return;
+  if (location.pathname !== '/segyunman-radar' && !location.pathname.startsWith('/segyunman-radar/')) return;
+  if (document.querySelector('script[data-cf-beacon]')) return;
+  const beacon = document.createElement('script');
+  beacon.type = 'module';
+  beacon.defer = true;
+  beacon.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+  beacon.setAttribute('data-cf-beacon', JSON.stringify({token}));
+  document.head.appendChild(beacon);
+})();
+</script>
 </body></html>
