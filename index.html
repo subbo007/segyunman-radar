@@ -1,9 +1,20 @@
 <!doctype html>
-<html lang="ko">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#25262f"><meta name="description" content="세계와 우리 동네의 감염병 보고 현황. 출처와 기준일을 함께 보는 세균맨 레이더."><title>세균맨 레이더 · 세계와 우리 동네</title><link rel="icon" type="image/png" href="assets/brand/coral-pin.png"><link rel="stylesheet" href="styles.css?v=fa3cd5afbbc0f13d"></head>
+<html lang="ko" data-theme="dark">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#25262f"><meta name="description" content="세계와 우리 동네의 감염병 보고 현황. 출처와 기준일을 함께 보는 세균맨 레이더."><title>세균맨 레이더 · 세계와 우리 동네</title><link rel="icon" type="image/png" href="assets/brand/coral-pin.png"><script>/* Apply the saved choice before styles load, including in the standalone HTML. */
+(() => {
+  let theme = 'dark';
+  try {
+    const saved = localStorage.getItem('radar-theme');
+    if (saved === 'light' || saved === 'dark') theme = saved;
+  } catch (_) { /* Restricted storage must not prevent viewing the dashboard. */ }
+  document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#25262f' : '#fbf8f6';
+})();
+</script>
+<link rel="stylesheet" href="styles.css?v=0db03889388c6bb7"></head>
 <body>
 <a class="skip-link" href="#maps">지도로 바로 가기</a>
-<header class="topbar"><a href="#" class="brand" aria-label="세균맨 레이더 홈"><img class="brand-icon" src="assets/brand/coral-pin.png" alt="" width="54" height="54"><span>세균맨<span class="brand-atlas"> 레이더</span><small>세계를 살피는 작은 지도</small></span></a><nav class="main-nav" aria-label="지도 범위"><button type="button" data-scope="world" class="nav-item active">세계 지도</button><button type="button" data-scope="korea" class="nav-item">우리나라 지도</button></nav><div class="header-actions"><button class="icon-button" id="openSources" aria-label="데이터 출처 및 정확성" title="데이터 출처">ⓘ</button><button class="btn-soft" id="openImport">＋ CSV 가져오기</button><span class="avatar" aria-hidden="true"><img src="assets/brand/coral-pin.png" alt="" width="28" height="28"></span></div></header>
+<header class="topbar"><a href="#" class="brand" aria-label="세균맨 레이더 홈"><img class="brand-icon" src="assets/brand/coral-pin.png" alt="" width="54" height="54"><span>세균맨<span class="brand-atlas"> 레이더</span><small>세계를 살피는 작은 지도</small></span></a><nav class="main-nav" aria-label="지도 범위"><button type="button" data-scope="world" class="nav-item active">세계 지도</button><button type="button" data-scope="korea" class="nav-item">우리나라 지도</button></nav><div class="header-actions"><button type="button" class="theme-toggle" id="themeToggle" aria-label="밝은 모드로 전환" title="밝은 모드로 전환"><span aria-hidden="true">☀</span><span class="theme-toggle-label">밝은 모드</span></button><button class="icon-button" id="openSources" aria-label="데이터 출처 및 정확성" title="데이터 출처">ⓘ</button><button class="btn-soft" id="openImport">＋ CSV 가져오기</button><span class="avatar" aria-hidden="true"><img src="assets/brand/coral-pin.png" alt="" width="28" height="28"></span></div></header>
 <main class="page-content">
 <div class="page-intro"><div><div class="eyebrow">OUR WORLD, A LITTLE CLOSER</div><h1 id="pageTitle">세계와 우리 동네, 한눈에.</h1><p id="pageSubtitle">숫자에 출처를 더하고, 지도에 일상을 담았어요.</p></div><div class="snapshot-chip"><span></span>저장된 공식 자료 <strong>2026.10.21 확인</strong></div></div>
 <section class="map-layout" id="maps" aria-label="세계 및 국내 감염병 지도">
@@ -23,6 +34,7 @@
 </section>
 <section class="companion-card"><div class="panel-heading"><div class="heading-profile"><span class="round-icon korea-icon">⌖</span><div><h2 id="companionTitle">우리나라 지도</h2><p id="companionSubtitle">17개 시·도 · 수두</p></div></div><span class="soft-badge" id="companionBadge">미연동</span></div><div class="companion-summary" id="companionSummary"><strong>아직 연결 전이에요</strong><span>지역별 수치를 준비하고 있어요.</span></div><div class="mini-canvas"><svg id="companionMap" viewBox="0 0 500 530" role="group" aria-label="국내 지도 미리보기"></svg><div id="miniTooltip" class="mini-tooltip" aria-live="polite">지역을 선택해 보세요</div></div><div class="companion-footer"><p id="companionNote">미연동은 0명이 아니에요.<br>공식 수치가 연결되면 이곳에 표시해요.</p><button id="openCompanion" class="btn-outline">우리나라 자세히 보기 <span>↗</span></button></div></section>
 </section>
+<section id="updateGuide" class="update-guide info-panel hidden" aria-labelledby="updateGuideTitle"></section>
 <section id="recentReports" class="recent-reports hidden" aria-labelledby="recentTitle"></section>
 <section id="ebolaFocus" class="focus-notice" aria-label="에볼라 집계 기준"><span class="notice-icon">ⓘ</span><p><strong>지금 보이는 숫자는 유행 기간의 누적 확진자예요.</strong> 국가별 기준일이 다르며, 현재 감염자 수나 현재 유행 국가 수를 뜻하지 않아요.</p><a href="https://www.who.int/emergencies/alert-and-response" target="_blank" rel="noopener noreferrer">WHO 원문 ↗</a></section>
 <section class="disease-section" aria-label="감염병 바로 선택"><div class="section-title"><h2>어떤 감염병이 궁금하세요?</h2><span>공식 수치와 미연동 상태를 구분해요</span></div><div id="diseaseStories" class="disease-stories"></div></section>
@@ -31,5 +43,5 @@
 <footer class="site-footer"><span class="footer-brand">세균맨 레이더</span><p>공식 보고를 더 가까이. 작은 지도로 살피는 우리의 세계.</p><small>2026 · 참고용 시각화 · 진단·방역 결정의 유일한 근거로 사용하지 마세요.<br>세계: Natural Earth · 국내: 2023 시·도 경계 자료 · 지도 경계는 법적 경계를 확정하지 않습니다.</small></footer>
 </main><div class="hidden" aria-hidden="true"><span id="breadcrumbScope"></span><span id="headerDataDate"></span><span id="todayText"></span><span id="mapFooterNote"></span><button id="mobileImport" tabindex="-1"></button></div>
 <div id="modalBackdrop" class="modal-backdrop hidden"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-header"><h2 id="modalTitle">자료 안내</h2><button id="closeModal" class="icon-button" aria-label="닫기">×</button></div><div id="modalContent"></div></div></div><div id="toast" role="status" class="toast hidden"></div>
-<script src="snapshot.js?v=fa3cd5afbbc0f13d"></script><script src="app.js?v=fa3cd5afbbc0f13d"></script>
+<script src="snapshot.js?v=0db03889388c6bb7"></script><script src="app.js?v=0db03889388c6bb7"></script>
 </body></html>

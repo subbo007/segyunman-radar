@@ -538,4 +538,92 @@ downloadCsv=function(){const ds=activeData();if(!ds.national)return expandedCore
 const expandedCoreModal=openModal;
 openModal=function(type){expandedCoreModal(type);if(type!=='sources')return;$('modalContent').innerHTML=`<div class="modal-content"><p><b>국내 전수신고</b><br><a href="https://www.data.go.kr/data/15139178/openapi.do" target="_blank" rel="noopener noreferrer">질병관리청 API</a>가 반환하는 전체 질병의 지역별 연간 신고를 수록합니다. 포털에서 확인되는 질병은 최근 7일 및 완료 주차 추이를 제공합니다. 누락값은 0으로 채우지 않습니다.</p><p><b>국내 표본감시</b><br>질병관리청 공식 포털의 독감·수족구 분율, 급성호흡기·장관감염증 주간 환자 수를 수록합니다. 전국·전체 연령 지표이며 전수신고와 구분합니다.</p><p><b>세계 자료</b><br>WHO 에볼라 공식 표, Mpox·Dengue 대시보드, GHO 홍역 연간 통계, 콜레라·AWD 대시보드, FluNet 표본감시 검출 자료를 연결합니다. 질병마다 누적·연간·주간·월간 집계가 다릅니다. 국가별 기간과 해당 화면의 출처·주의사항을 확인하세요.</p><p><b>자동 갱신</b><br>매일 09:23 KST에 GitHub Actions가 수집·검증·배포합니다. 각 출처의 실패는 별도로 표시하며 마지막 정상 자료를 보존합니다. 원천기관의 발표 주기와 수집 주기는 다릅니다. 화면은 배포 자료를 5분마다 다시 읽으며 API 키는 공개되지 않습니다.</p><p><b>지도</b><br>수록 국가와 지도 경계가 일치하지 않는 일부 지역은 목록에서 확인할 수 있습니다. 전남광주 통합 응답도 목록에 별도로 보존합니다. 회색은 미보고이며 0건과 다릅니다.</p></div>`;};
 
+function setRadarTheme(theme, save = true) {
+  theme = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#25262f' : '#fbf8f6';
+  const button = $('themeToggle'), next = theme === 'dark' ? '밝은 모드' : '어두운 모드';
+  button.setAttribute('aria-label', next + '로 전환');
+  button.title = next + '로 전환';
+  button.innerHTML = `<span aria-hidden="true">${theme === 'dark' ? '☀' : '☾'}</span><span class="theme-toggle-label">${next}</span>`;
+  if (save) try { localStorage.setItem('radar-theme', theme); } catch (_) { /* Session-only choice remains usable. */ }
+}
+
+// The API's advertised refresh interval is distinct from our collection schedule
+// and from the annual/daily/weekly period represented by a number.
+function koreaCadence(data, disease) {
+  const sentinel = data.sentinel?.datasets?.[disease];
+  const annual = data.korea || {}, recent = annual.recent || {};
+  const catalog = annual.catalog?.find(item => item.id === disease);
+  if (!sentinel && !catalog) return null;
+  const ds = sentinel || annual, entry = recent.diseases?.[disease];
+  const source = data.updateStatus?.sources?.[ds.sourceKey || 'kdca'] || {};
+  const daily = entry?.daily || [], weekly = entry?.weekly || [];
+  const validDays = daily.filter(point => point.cases != null);
+  const lastWeek = weekly.filter(point => point.cases != null).at(-1);
+  const dailyNote = entry?.dailyState === 'error' ? '일별 조회 실패' : entry?.dailyState === 'unavailable' ? '일별 자료 미제공' : !validDays.length ? '일별 수치 미보고' : '일별 조회 제공';
+  return {
+    id: disease, name: sentinel?.title || catalog.label, sentinel: !!sentinel,
+    publication: sentinel ? '매주 · 주간 자료' : '실시간¹ · API 안내',
+    aggregation: sentinel ? ds.metricLabel + ' · 주 단위' : (validDays.length ? '지역별 연간 누적 · 전국 일별/주별' : '지역별 연간 누적 · 전국 주별'),
+    period: sentinel ? ds.periodLabel : (annual.period ? annual.period + '년 누적' : '연도 미제공'),
+    detail: sentinel ? '전국 표본기관 · 전체 환자 수와 다름' : [validDays.length ? '일별 ' + validDays.at(-1).date : dailyNote, lastWeek ? '주간 ' + lastWeek.label : '주간 자료 미제공'].join(' / '),
+    dailyNote, dailyEnd: validDays.at(-1)?.date || null,
+    successAt: source.lastSuccessAt || ds.checkedAt || null,
+    status: source.state === 'ok' ? '수집 확인' : source.state === 'partial' ? '일부 수집 지연' : source.state === 'error' ? '갱신 실패 · 이전 자료' : '수집 상태 확인 필요',
+    sourceUrl: ds.sourceUrl,
+    note: sentinel ? '한 주의 표본기관 지표입니다. 분율과 환자 수는 서로 더하지 않습니다.' : '지도는 해당 연도에 신고된 누적 건수입니다. 현재 감염자 수나 오늘 발생한 환자 수가 아닙니다.'
+  };
+}
+
+function renderCadenceRows() {
+  const query = $('cadenceSearch').value.trim().toLocaleLowerCase('ko-KR');
+  const kind = $('cadenceKind').value;
+  const rows = KOREA.map(d => koreaCadence(state.data, d.id)).filter(Boolean)
+    .filter(row => row.name.toLocaleLowerCase('ko-KR').includes(query) && (kind === 'all' || row.sentinel === (kind === 'sentinel')));
+  $('cadenceCount').textContent = `${rows.length}개 질병·지표`;
+  $('cadenceRows').innerHTML = rows.map(row => `<tr${row.id === state.disease ? ' class="cadence-selected"' : ''}><th scope="row">${esc(row.name)}${row.id === state.disease ? '<small>지금 보는 질병</small>' : ''}</th><td>${esc(row.publication)}<small>${esc(row.aggregation)}</small></td><td>${esc(row.period)}<small>${esc(row.detail)}</small></td><td>${esc(localTime(row.successAt))}<small>${esc(row.status)}</small><a href="${safeUrl(row.sourceUrl)}" target="_blank" rel="noopener noreferrer">공식 원자료 ↗</a></td></tr>`).join('') || '<tr><td colspan="4">검색 결과가 없어요. 다른 질병 이름을 입력해 주세요.</td></tr>';
+}
+
+function renderUpdateGuide() {
+  const box = $('updateGuide');
+  const row = state.scope === 'korea' ? koreaCadence(state.data, state.disease) : null;
+  box.classList.toggle('hidden', !row);
+  if (!row) return;
+  // Keep a user's search and disclosure state during periodic data refreshes.
+  const opened = $('cadenceDetails')?.open || false;
+  const query = $('cadenceSearch')?.value || '', kind = $('cadenceKind')?.value || 'all';
+  const imported = !!activeData().imported;
+  box.innerHTML = `<div class="cadence-heading"><div><div class="eyebrow">WHEN THE NUMBERS CHANGE</div><h2 id="updateGuideTitle">이 숫자, 언제 갱신되나요?</h2></div><span class="panel-badge">${esc(row.name)}</span></div>
+    <p class="cadence-explainer">${imported ? '현재 지도는 직접 가져온 CSV입니다. 아래는 서비스에 연결된 공식 자료의 갱신 안내이며 CSV에는 적용되지 않습니다.' : esc(row.note)}</p>
+    <div class="cadence-cards"><div><span>공식 원자료</span><strong>${esc(row.publication)}</strong><small>${esc(row.aggregation)}</small></div><div><span>현재 수록 기간</span><strong>${esc(row.period)}</strong><small>${esc(row.detail)}</small></div><div><span>사이트 수집 일정</span><strong>${ATLAS_OFFLINE ? '저장된 HTML 사본' : '매일 오전 9:23'}</strong><small>${ATLAS_OFFLINE ? '자동 갱신은 배포 사이트에서 확인해 주세요.' : '한국 시간 · 수집·배포 지연 가능'}</small></div></div>
+    <p class="cadence-foot">마지막 정상 수집 <b>${esc(localTime(row.successAt))}</b> · ${esc(row.status)}<br>수집 시각은 기관의 발표 시각과 다릅니다. ${ATLAS_OFFLINE ? '이 파일은 저장 이후 자동으로 갱신되지 않습니다.' : '열린 화면은 배포 자료를 5분마다 다시 확인합니다.'}</p>
+    <details id="cadenceDetails"${opened ? ' open' : ''}><summary>전체 질병별 갱신 주기 보기 · ${KOREA.length}개 질병·지표</summary><div class="cadence-tools"><label>질병 이름 검색<input type="search" id="cadenceSearch" placeholder="수두, 독감, 코로나19…"></label><label>자료 종류<select id="cadenceKind" aria-label="자료 종류"><option value="all">전체</option><option value="notification">전수신고</option><option value="sentinel">표본감시</option></select></label><span id="cadenceCount" role="status"></span></div><div class="cadence-table-scroll" role="region" aria-label="질병별 갱신 주기 표" tabindex="0"><table class="cadence-table"><caption>공식 발표·갱신 주기와 실제 수록 기간</caption><thead><tr><th scope="col">질병·지표</th><th scope="col">원자료 갱신 · 집계 단위</th><th scope="col">수록 기간</th><th scope="col">마지막 정상 수집 (KST)</th></tr></thead><tbody id="cadenceRows"></tbody></table></div></details>
+    <p class="cadence-foot cadence-references">¹ <a href="https://www.data.go.kr/data/15139178/openapi.do" target="_blank" rel="noopener noreferrer">공공데이터포털</a>의 전수신고 API 갱신 주기는 ‘실시간’으로 안내됩니다. 개별 신고가 즉시 공개된다는 보장은 아니며 잠정 통계는 수정될 수 있습니다. 일별 조회는 <a href="https://dportal.kdca.go.kr/pot/is/dashboardEDW.do" target="_blank" rel="noopener noreferrer">질병관리청 대시보드</a>의 기준일까지 제공합니다. 표본감시는 <a href="https://dportal.kdca.go.kr/pot/bbs/BD_selectBbsList.do?q_bbsSn=1010&amp;q_clsfNo=2" target="_blank" rel="noopener noreferrer">주간소식지</a>와 공식 통계의 주간 자료이며, 모든 질병의 게시 시각이 동일하지는 않습니다.</p>`;
+  $('cadenceSearch').value = query; $('cadenceKind').value = kind;
+  $('cadenceSearch').addEventListener('input', renderCadenceRows);
+  $('cadenceKind').addEventListener('change', renderCadenceRows);
+  renderCadenceRows();
+}
+
+const renderBeforePreferences = renderAll;
+renderAll = function() {
+  renderBeforePreferences();
+  const ds = activeData();
+  if (state.scope === 'korea' && koreaOfficial(ds) && !ds.imported) {
+    $('casesLabel').textContent = ds.period + '년 누적 신고';
+    $('metricCasesNote').textContent = '수록 지역 합계 · 오늘 발생 수 아님';
+    $('mapDescription').textContent = diseaseName('korea', state.disease) + ' · ' + ds.period + '년 누적 신고';
+  }
+  if (ds.national) $('metricDate').closest('.metric').querySelector('.metric-head').textContent = '최근 완료 주차';
+  renderUpdateGuide();
+};
+
+const initBeforePreferences = init;
+init = function() {
+  setRadarTheme(document.documentElement.dataset.theme, false);
+  $('themeToggle').addEventListener('click', () => setRadarTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+  initBeforePreferences();
+};
+
 init();
