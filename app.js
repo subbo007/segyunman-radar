@@ -626,4 +626,153 @@ init = function() {
   initBeforePreferences();
 };
 
+/* Display policy only: collected source data and its history remain intact. */
+const DOMESTIC_CORE = [{"id": "kdca-c75e9f230635", "label": "에볼라", "group": "국내 신고", "reason": "국내 신고만 표시합니다. 해외 유행은 세계 지도에서 별도로 확인하세요.", "url": "https://www.who.int/emergencies/alert-and-response"}, {"id": "influenza", "label": "독감", "group": "호흡기 표본감시", "reason": "이른 유행과 접종 안내 보도. 외래환자 1,000명당 의사환자 분율입니다.", "url": "https://m.metroseoul.co.kr/article/20261012500385"}, {"id": "covid19", "label": "코로나19", "group": "호흡기 표본감시", "reason": "10월 예방접종 시행. 표본감시기관의 주간 입원환자 수입니다.", "url": "https://m.korea.kr/briefing/pressReleaseView.do?newsId=156782132"}, {"id": "sentinel-70d651fb58af", "label": "RSV", "group": "호흡기 표본감시", "reason": "43주차 영유아 호흡기 감시 동향. 표본감시기관의 주간 입원환자 수입니다.", "url": "https://www.yugacrew.com/infection-watch/rsv"}, {"id": "chickenpox", "label": "수두", "group": "국내 신고", "reason": "10월 군 감염 보도와 국내 누적 신고 규모를 고려했습니다.", "url": "https://newspim.com/news/view/20261012001038"}, {"id": "kdca-0f99247ca8cd", "label": "C형간염", "group": "국내 신고", "reason": "10월 창원 혈액투석실 집단감염 보도. 카드 숫자는 해당 사례만이 아닌 전국 신고입니다.", "url": "https://www.seoul.co.kr/news/society/health-medical/2026/10/21/20261021500087"}, {"id": "kdca-c94f6b84228f", "label": "쯔쯔가무시증", "group": "가을철 진드기 매개", "reason": "가을철 야외활동과 털진드기 감시 관련 보도를 반영했습니다.", "url": "https://www.imaeil.com/page/view/2026092007285952339"}, {"id": "kdca-3bef95c0da30", "label": "SFTS", "group": "가을철 진드기 매개", "reason": "가을철 진드기 주의 보도에서 다룬 중증열성혈소판감소증후군입니다.", "url": "https://www.imaeil.com/page/view/2026092007285952339"}];
+const DOMESTIC_ADVISORIES = [{
+  disease:'influenza', title:'인플루엔자 유행주의보 발령 발표',
+  published:'2026-09-11', reviewed:'2026-10-24',
+  url:'https://kdca.go.kr/kdca/2848/subview.do?enc=Zm5jdDF8QEB8JTJGYmJzJTJGa2RjYSUyRjQyJTJGMzEyNTkzJTJGYXJ0Y2xWaWV3LmRvJTNG'
+}];
+
+function domesticMetric(id) {
+  const ds = state.data.sentinel?.datasets?.[id];
+  if (ds) return {value:ds.latest?.value,unit:ds.unit,period:ds.latest?.label || ds.periodLabel,kind:ds.metric === 'sentinel_ratio' ? '표본 · 의사환자 분율' : ds.metricLabel?.includes('입원') ? '표본 · 주간 입원' : '표본 · 주간 신고',note:ds.metricLabel};
+  return {value:state.data.korea?.nationalAnnual?.[id],unit:'건',period:(state.data.korea?.period || '—')+'년 누적',kind:'전수 · 누적 신고',note:'전국 누적 신고 · 현재 감염자 수 아님'};
+}
+
+function domesticCore() { return DOMESTIC_CORE.filter(d => KOREA.some(item => item.id === d.id)); }
+function domesticMatches(query,kind) {
+  const normalize = t => t.toLowerCase().replace(/[\s-]/g,'');
+  const aliases = {influenza:'독감 인플루엔자',covid19:'코로나19 covid19','sentinel-70d651fb58af':'RSV','kdca-3bef95c0da30':'중증열성혈소판감소증후군 SFTS'};
+  const q=normalize(query);
+  return q ? KOREA.filter(d => normalize(d.label+' '+(aliases[d.id]||'')).includes(q) &&
+    (kind==='all'||(kind==='sentinel')===(d.kind==='sentinel'))) : [];
+}
+function diseaseButton(d,compact=false) {
+  const m=domesticMetric(d.id), selected=state.disease===d.id;
+  const label=m.kind.includes('분율')?'표본 · 의사환자 분율':m.kind.includes('입원')?'표본 · 주간 입원':m.kind.includes('주간')?'표본 · 주간 신고':'국내 누적 신고';
+  return `<button type="button" class="${compact?'catalog-result':'core-disease'}${selected?' is-active':''}" data-domestic-id="${esc(d.id)}" aria-pressed="${selected}"><strong>${esc(d.label)}</strong><span class="discovery-value">${m.value==null?'—':nf(m.value)}<small>${m.value==null?'미보고':esc(m.unit||'')}</small></span><span class="clean-card-meta">${esc(m.period||'기간 미제공')} · ${label}</span></button>`;
+}
+function renderDomesticSearch(){
+  const q=$('domesticSearch').value.trim(), rows=domesticMatches(q,$('domesticKind').value);
+  $('domesticSearchCount').textContent=q?rows.length+'개 검색 결과':'';
+  $('catalogResults').innerHTML=q?(rows.map(d=>diseaseButton(d,true)).join('')||'<p>검색 결과가 없습니다.</p>'):'<p>질병 이름을 입력하세요. 예: 백일해, 홍역</p>';
+}
+function renderDomesticDiscovery(){
+  let box=$('domesticDiscovery');
+  if (!box){
+    box=document.createElement('section');box.id='domesticDiscovery';box.setAttribute('aria-label','국내 주요 감염병');$('maps').before(box);
+    box.addEventListener('click',e=>{
+      const btn=e.target.closest('[data-domestic-id]');
+      if(!btn)return;
+      const id=btn.dataset.domesticId, region=btn.closest('#catalogResults')?'catalogResults':'domesticDiscovery';
+      switchDisease(id);$(region)?.querySelector('[data-domestic-id="'+id+'"]')?.focus({preventScroll:true});
+    });
+  }
+  box.classList.toggle('hidden',state.scope!=='korea');if(state.scope!=='korea')return;
+  const open=$('domesticCatalog')?.open, q=$('domesticSearch')?.value||'', kind=$('domesticKind')?.value||'all';
+  const notice=DOMESTIC_ADVISORIES[0];
+  box.innerHTML=`<div class="discovery-heading"><h2>국내 주요 감염병 8종</h2><a href="#domesticCatalog" id="openDomesticSearch">질병 검색 ↗</a></div>
+    <div class="core-diseases">${domesticCore().map(d=>diseaseButton(d)).join('')}</div>
+    <div class="discovery-extras"><section class="advisory-panel"><h3>공식 발표 기록</h3><a class="domestic-advisory" href="${safeUrl(notice.url)}" target="_blank" rel="noopener noreferrer"><strong>${esc(notice.title)} ↗</strong><span>${esc(notice.published)}</span></a></section></div>
+    <details id="domesticCatalog"${open?' open':''}><summary>다른 질병 검색</summary><div class="catalog-tools"><label>질병 검색<input type="search" id="domesticSearch" placeholder="예: 백일해, 홍역, RSV" autocomplete="off"></label><label>감시 방식<select id="domesticKind"><option value="all">전체</option><option value="notification">전수신고</option><option value="sentinel">표본감시</option></select></label><span id="domesticSearchCount" role="status"></span></div><div id="catalogResults" class="catalog-results"></div></details>`;
+  $('domesticSearch').value=q;$('domesticKind').value=kind;
+  $('domesticSearch').oninput=renderDomesticSearch;$('domesticKind').onchange=renderDomesticSearch;
+  $('openDomesticSearch').onclick=e=>{e.preventDefault();$('domesticCatalog').open=true;$('domesticSearch').focus();};
+  renderDomesticSearch();
+}
+const generalOptions=refreshDiseaseOptions;
+refreshDiseaseOptions=function(){
+  generalOptions();if(state.scope!=='korea')return;
+  const core=domesticCore(), id=state.disease, selected=KOREA.find(d=>d.id===id);
+  const special=selected&&!core.some(d=>d.id===id)?`<option hidden value="${esc(id)}">검색 결과 · ${esc(selected.label)}</option>`:'';
+  $('diseaseSelect').innerHTML=special+core.map(d=>`<option value="${esc(d.id)}">${esc(d.label)}</option>`).join('');
+  $('diseaseSelect').value=id;
+};
+const worldStories=renderStories;
+renderStories=function(){
+  const domestic=state.scope==='korea';$('diseaseStories').closest('.disease-section').classList.toggle('hidden',domestic);
+  if(domestic)$('diseaseStories').replaceChildren();else worldStories();
+};
+const generalRender=renderAll;
+renderAll=function(){generalRender();renderDomesticDiscovery();document.querySelector('.news-panel').classList.toggle('hidden',state.scope==='korea');};
+const generalInit=init;
+init=function(){
+  applyPublicData(embeddedPublicData());
+  state.scope='korea';state.disease='kdca-c75e9f230635';state.selected='11';state.mapCenter=[500,300];
+  document.querySelectorAll('[data-scope]').forEach(b=>b.classList.toggle('active',b.dataset.scope==='korea'));
+  $('scopeSelect').value='korea';generalInit();
+};
+function compactPeriods() {
+  var ds=activeData(), national=!!ds.national;
+  document.body.classList.toggle('clean-national',national);
+  document.body.classList.toggle('clean-korea',state.scope==='korea');
+  document.querySelectorAll('.metric-foot').forEach(el=>el.classList.remove('clean-period'));
+  var info=sourceState(), delayed=info.state==='error'||info.state==='partial'||updateStateLabel()==='최근 갱신 지연';
+  if (delayed && !ds.imported) $('mapBadge').textContent=(state.scope==='korea'?'KDCA':'WHO')+' · 이전 자료';
+  if(state.scope==='korea' && koreaOfficial(ds) && !ds.imported) {
+    var trend=state.data.korea?.recent, entry=trend?.diseases?.[state.disease], week=entry?.weekly?.at(-1);
+    if(entry) {
+      $('metricCasesNote').textContent=state.disease==='kdca-f73b8a6c18e9'?'병원체보유자 포함':'전국 누적';
+      $('deathsLabel').textContent='최근 7일 신고';
+      $('metricDeaths').textContent=entry.last7Days==null?'—':nf(entry.last7Days);
+      $('metricDeaths').nextElementSibling.textContent='건';
+      $('metricDeathsNote').textContent=trend.startDate+' ~ '+trend.endDate;
+      $('metricRegionLabel').textContent='최근 완료 주 신고';
+      $('metricRegions').textContent=week?.cases==null?'—':nf(week.cases);
+      $('metricRegions').nextElementSibling.textContent='건';
+      $('metricRegionsNote').textContent=week?.label || '미보고';
+      $('metricDate').closest('.metric').querySelector('.metric-head').textContent='최근 일별 신고';
+      $('metricDate').textContent=entry.latestDay?.cases==null?'—':nf(entry.latestDay.cases)+'건';
+      $('metricDateNote').textContent=entry.latestDay?.date || '미보고';
+      for(var id of ['metricCasesNote','metricDeathsNote','metricRegionsNote','metricDateNote']) $(id).classList.add('clean-period');
+    }
+  } else {
+    $('metricDeaths').nextElementSibling.textContent='명';
+    if(ds.mixedPeriods) {$('metricCasesNote').textContent='기간 상이 · 합산 안함';$('metricCasesNote').classList.add('clean-period');}
+  }
+}
+var compactRenderBefore=renderAll;
+renderAll=function() {
+  compactRenderBefore();
+  $('pageTitle').textContent=state.scope==='korea'?'우리나라 감염병':'세계 감염병';
+  $('openSources').classList.add('clean-source-button');
+  $('openSources').innerHTML='<span aria-hidden="true">ⓘ</span><span>데이터 출처</span>';
+  $('openSources').setAttribute('aria-label','데이터 출처');
+  $('openSources').title='출처 · 갱신일 · 집계 기준';
+  compactPeriods();
+  if(state.scope==='korea' && state.disease==='kdca-c75e9f230635') {
+    $('mapDescription').textContent='에볼라바이러스병 · 대한민국 신고';
+    $('metricCasesNote').textContent='국내 누적 신고 · 해외 발생 제외';
+  }
+};
+function sourceReadmeHTML() {
+  var ds=activeData(), title=diseaseName(state.scope,state.disease);
+  var links='<a href="'+safeUrl(ds.sourceUrl)+'" target="_blank" rel="noopener noreferrer">선택한 자료의 공식 원문 ↗</a>';
+  var sourceTable=$('sourcePanel').innerHTML;
+  var notes=($('qualityNotes')?.innerHTML || '') + '<li>누적 신고·확진은 현재 감염자 수와 다릅니다. 표본감시는 전국 전체 환자 수가 아닙니다.</li><li>미보고는 0이 아닙니다. 분율(/1,000명), 신고 건수, 입원환자 수는 서로 합산하거나 크기로 직접 비교하지 않습니다.</li><li>국내 CRE 신고는 환자와 병원체보유자를 포함합니다.</li><li>현재 감염 위험을 지도 색상만으로 판단하지 마세요.</li>';
+  var boundary=$('boundaryNote');if(boundary && !boundary.classList.contains('hidden'))notes+='<li>'+esc(boundary.textContent)+'</li>';
+  var cadence=state.scope==='korea'?domesticCore().map(d=>koreaCadence(state.data,d.id)).filter(Boolean):[];
+  var rows=cadence.map(c=>'<tr><th>'+esc(c.name)+'</th><td>'+esc(c.publication)+'<br>'+esc(c.period)+'</td><td>'+esc(localTime(c.successAt))+'<br>'+esc(c.status)+'</td></tr>').join('');
+  var selectedCadence=state.scope==='korea'?koreaCadence(state.data,state.disease):null;
+  var alerts=state.scope==='korea'?DOMESTIC_ADVISORIES.map(a=>'<p><a href="'+safeUrl(a.url)+'" target="_blank" rel="noopener noreferrer">'+esc(a.title)+'</a><br>발표 '+esc(a.published)+' · 원문 확인 '+esc(a.reviewed)+'</p>').join(''):$('newsList').innerHTML;
+  var basis=DOMESTIC_CORE.map(c=>'<li><b>'+esc(c.label)+'</b> — '+esc(c.reason)+' <a href="'+safeUrl(c.url)+'" target="_blank" rel="noopener noreferrer">근거 ↗</a></li>').join('');
+  return '<div class="modal-content clean-source-content"><h3>'+esc(title)+'</h3>'+sourceTable+'<p>'+links+'</p>'+
+    '<details open><summary>집계 기준과 숫자 읽는 법</summary>'+(selectedCadence?'<p>'+esc(selectedCadence.aggregation)+'<br>'+esc(selectedCadence.detail)+'</p>':'')+'<ul>'+notes+'</ul></details>'+
+    '<details><summary>갱신 주기와 마지막 정상 수집</summary><p>'+(ATLAS_OFFLINE?'오프라인 사본은 자동 갱신되지 않습니다.':'이 화면은 배포된 자료를 5분마다 다시 확인합니다.')+' 운영 사이트의 예정 수집 시각은 매일 09:23 KST이며 기관 발표 주기와 다릅니다. 수집 실패 시 이전 정상 자료를 유지합니다. 수집 시각은 환자 발생일이 아닙니다.</p>'+(rows?'<div class="source-table-scroll"><table><thead><tr><th>질병·지표</th><th>원자료·수록 기간</th><th>마지막 정상 수집</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'')+'<p><a href="https://www.data.go.kr/data/15139178/openapi.do" target="_blank" rel="noopener noreferrer">전수신고 API</a>의 갱신 안내는 실시간이며 개별 신고의 즉시 공개를 보장하지 않습니다. 표본감시는 주간 자료입니다.</p></details>'+
+    '<details><summary>공식 발표와 경보</summary>'+alerts+'<p>수동 확인한 발표 기록입니다. 해제·변경 여부를 자동 확인하지 않습니다. 현행 경보는 원문을 확인하세요.</p></details>'+
+    '<details><summary>국내 8종 선정 근거</summary><p>2026.11.01 편집 선정. 에볼라와 최근 보도·예방접종 안내·주간 감시에서 주목한 7종입니다. 기사량 순위나 위험도 순위는 아닙니다.</p><ul>'+basis+'</ul><p>빠른 선택은 8종입니다. 그 외 질병은 이름 검색으로 확인합니다. 에볼라는 국내 누적이 0건이어도 표시합니다. 연간 신고 0건인 질병도 검색할 수 있습니다. 미보고와 0건은 구분합니다.</p></details>'+
+    '<details><summary>지도·국내외 출처·이용 안내</summary><p>국내 전수신고·일별 대시보드·주간 표본감시: 질병관리청. 세계 에볼라·엠폭스·뎅기열·홍역·콜레라·독감: WHO의 개별 보고 자료. 국가별 보고 기간이 다를 수 있습니다.</p><p>세계 지도는 Natural Earth, 국내는 2023년 17개 시·도 경계입니다. 지도는 법적 경계를 확정하지 않으며 전남광주 통합 신고는 목록에 별도로 보존하고 지도에 나누지 않습니다. 참고용 시각화이며 진단·방역 결정의 유일한 근거로 사용하지 마세요.</p><p>국내 에볼라는 질병관리청 신고 자료이며 해외 WHO 집계와 구분합니다.</p></details>'+
+    '<div class="source-actions"><button type="button" class="btn-outline" id="compactReload">'+(ATLAS_OFFLINE?'저장 자료 다시 읽기':'최신 배포 자료 확인')+'</button><button type="button" class="btn-outline" id="compactImport">CSV 가져오기</button></div></div>';
+}
+var compactModalBefore=openModal;
+openModal=function(type) {
+  compactModalBefore(type);
+  if(type!=='sources') return;
+  $('modalTitle').textContent='데이터 출처';
+  $('modalContent').innerHTML=sourceReadmeHTML();
+  $('compactReload').onclick=async()=>{await loadStaticData();openModal('sources');};
+  $('compactImport').onclick=()=>openModal('import');
+};
+
 init();
